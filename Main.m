@@ -69,3 +69,12 @@ disp("The natural edge frequency is: " + num2str(omega_edge) + " rad/s or " + ..
     num2str(omega_edge/2/pi) + " Hz")
 
 %% 2 Coupling Aerodynamic with Structural Modules
+
+% We need to construct the rest of the code before continuing with question
+% 2 of the booklet. We first need to run the BEM with a chosen wind speed
+% (TSR) and extract the force per segment (axial and tangential). We then
+% must couple it to the structural equation of motion to derive the
+% deformation of the section. 
+
+% Each deformation will cause a change of the relative velocity due to a
+% flapwise and edgewise displacement. We also need 
