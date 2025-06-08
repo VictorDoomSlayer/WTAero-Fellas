@@ -1,4 +1,4 @@
-function [Rx, FN, FT, Vind_axial, Vind_tangential] = BEMcode(Vinf,Omega,Pitch,Vin,Vout)
+function [Rx, FN, FT, Vind_axial, Vind_tangential] = BEMcode(Vinf,Omega,Pitch,Vin,Vout,BS,AD)
 
 %Rotor/ Wake Aerodynamics
 %Group 28 
@@ -22,14 +22,6 @@ rRoot = hubrad;
 %------------------------------------------------
 %initialization: initial value of inductions
 a=0;a_prime=0;
-
-%import Blade section file
-BS = table2array(readtable('Blade/Blade section/Blade section.dat'));
-%import Aero data files
-Readfiles = dir(fullfile('Blade/Aero data/','*.dat'));
-for i=1:length(Readfiles)
-    AD{i}=importdata(strcat('Blade/Aero data/',Readfiles(i).name));
-end
 
 NBS=length(BS);    %Number of blade sections
 % define vectors for blade section locations and loads in two directions
@@ -147,8 +139,10 @@ aprime = 0.01 * ones(1,NBS); % Initialize tangential induction factor along blad
         aEnd = a(i,j); 
         aprimeEnd = aprime(i,j);
 
-        FN(j)=0.5*rho*((r*omega*(1+aprimeEnd))^2+(Vinf*(1-aEnd))^2)*chord*Cx*dr;
-        FT(j)=0.5*rho*((r*omega*(1+aprimeEnd))^2+(Vinf*(1-aEnd))^2)*chord*Cy*dr;
+        % FN(j)=0.5*rho*((r*omega*(1+aprimeEnd))^2+(Vinf*(1-aEnd))^2)*chord*Cx*dr;
+        % FT(j)=0.5*rho*((r*omega*(1+aprimeEnd))^2+(Vinf*(1-aEnd))^2)*chord*Cy*dr;
+        FN(j) = FAxial(j);
+        FT(j) = FTang(j);
         % bending moment
         Mx(j)=FT(j)*r;
     
