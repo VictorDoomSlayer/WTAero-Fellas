@@ -1,5 +1,5 @@
 
-function [Rx,FN,FT,P]=BEM(v0,omega,pitch)
+function [Rx,FN,FT,P,Vind_axial,Vind_tangential]=BEM(v0,omega,pitch,vin,vout)
 %------------------------------------------------
 % Blade Element Momentum
 %------------------------------------------------
@@ -41,22 +41,24 @@ EPS=0.00001;    %iterative precision tolerance
 a=0;a_prime=0;
 
 %import Blade section file
-BS=importdata('Blade\Blade section\Blade section.dat').data;
-
+BS = table2array(readtable('Blade/Blade section/Expanded_Blade_Section_Table__48_points_.csv'));
 %import Aero data files
-Readfiles = dir(fullfile('Blade\Aero data\','*.dat'));
+Readfiles = dir(fullfile('Blade/Aero data/','*.dat'));
 for i=1:length(Readfiles)
-    AD{i}=importdata(strcat('Blade\Aero data\',Readfiles(i).name));
+    AD{i}=importdata(strcat('Blade/Aero data/',Readfiles(i).name));
 end
 
 NBS=length(BS);    %Number of blade sections
 % define vectors for blade section locations and loads in two directions
 Rx=zeros(NBS,1);FN=zeros(NBS,1);FT=zeros(NBS,1);
 
+Vind_axial =zeros(NBS,1);
+Vind_tangential=zeros(NBS,1);
+
 % LOOP: from the root section to the tip section
 for i=1:NBS
-    ADofBS=BS(i,2); % read airfoil number for each section
-    r=BS(i,3);      % read radius
+    ADofBS=BS(i,3); % read airfoil number for each section
+    r=BS(i,2);      % read radius
     Rx(i)=r;        % record radius
     dr=BS(i,4);     % read segment length
     Theta=BS(i,5);  % read twist angle
@@ -80,7 +82,7 @@ for i=1:NBS
         a_prime=ax_prime;
         
         % inflow angle
-        Phi=atan((1-a)*v0/((1+a_prime)*r*omega));
+        Phi=atan(((1-a)*v0-vout(i))/((1+a_prime)*r*omega)-vin(i));
         Phi=rad2deg(Phi);
         
         %AOA
@@ -113,8 +115,7 @@ for i=1:NBS
         
         % in case of iterative convergence failure
         if numite>=100
-            ax=0.3;
-            ax_prime=0.1;
+            break
         end
     end
     
@@ -130,8 +131,14 @@ for i=1:NBS
     FT(i)=0.5*rou*((r*omega*(1+a_prime))^2+(v0*(1-a))^2)*chord*Ct*dr;
     % bending moment
     Mx(i)=FT(i)*r;
+
+    % Induced velocities
+    Vind_axial(i)      = a.* v0;
+    Vind_tangential(i) = a_prime .* omega .* Rx(i);
 end
 
 M=sum(Mx); % rotor torque from one blade
 P=M*omega*3*0.944;  % Power
+
+
 end

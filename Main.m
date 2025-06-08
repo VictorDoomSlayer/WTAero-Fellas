@@ -2,79 +2,130 @@ clc
 clear
 close all
 
-% Victor Vassilev
 % Wind Turbine Aeroelasticity
 % Delft University of Technology
 
-% Code for analyzing flapwise and edgewise deformations and dynamics of the
-% NREL5MW wind turbine reference
-
-%% 1 Setting the structural parameters
-
+% 1. Structural Parameters
 load("NREL5MW.mat")
-R = Blade.Radius(end); % Length of Blade
+R = Blade.Radius(end);
 damp_ratio = 0.00477465;
 
+% Mode shapes
+phi_1f = @(r) 0.0622*(r./R).^2 + 1.7254*(r./R).^3 - 3.2452*(r./R).^4 + 4.7131*(r./R).^5 - 2.2555*(r./R).^6;
+phi2_1f = @(r) (1/R^2)*(2*0.0622 + 6*1.7254*(r./R) - 12*3.2452*(r./R).^2 + 20*4.7131*(r./R).^3 - 30*2.2555*(r./R).^4);
+phi_1e = @(r) 0.3627*(r./R).^2 + 2.5337*(r./R).^3 - 3.5772*(r./R).^4 + 2.376*(r./R).^5 - 0.6952*(r./R).^6;
+phi2_1e = @(r) (1/R^2)*(2*0.3627 + 6*2.5337*(r./R) - 12*3.5772*(r./R).^2 + 20*2.376*(r./R).^3 - 30*0.6952*(r./R).^4);
 
-% Following mode factors taken from Slide 32 "Structural Dynamics"
-phi_1f = @(r) 0.0622*(r./R).^2 + 1.7254*(r./R).^3 - 3.2452*(r./R).^4 +...
-    4.7131*(r./R).^5 - 2.2555*(r./R).^6;
-phi2_1f = @(r) (1/R^2)*(6*1.7254*(r./R) - 12*3.2452*(r./R).^2 +...
-    20*4.7131*(r./R).^3 - 30*2.2555*(r./R).^4);
-
-phi_1e = @(r) 0.3627*(r./R).^2 + 2.5337*(r./R).^3 - 3.5772*(r./R).^4 +...
-    2.376*(r./R).^5 - 0.6952*(r./R).^6;
-phi2_1e = @(r) (1/R^2)*(6*2.5337*(r./R) - 12*3.5772*(r./R).^2 +...
-    20*2.376*(r./R).^3 - 30*0.6952*(r./R).^4);
-
-% Calculating the eigenfrequency of the FLAP motion
-
+% Mass and stiffness integrals
 Mass = Blade.Mass;
 Stiffness_Flap = Blade.EIflap;
 Stiffness_Edge = Blade.EIedge;
-M1f = zeros(length(Blade.Radius),1);
-K1f = zeros(length(Blade.Radius),1);
-M1e = zeros(length(Blade.Radius),1);
-K1e = zeros(length(Blade.Radius),1);
+r_struct = Blade.Radius;
+dr_struct = diff(r_struct); dr_struct(end+1) = dr_struct(end);
 
-dr = diff(Blade.Radius);
-dr = [dr; dr(end)];
+M1f = sum(dr_struct .* Mass .* (phi_1f(r_struct)).^2);
+K1f = sum(dr_struct .* Stiffness_Flap .* (phi2_1f(r_struct)).^2);
+M1e = sum(dr_struct .* Mass .* (phi_1e(r_struct)).^2);
+K1e = sum(dr_struct .* Stiffness_Edge .* (phi2_1e(r_struct)).^2);
 
-for i = 1:length(Blade.Radius)
-M1f(i) = dr(i)*Mass(i)*(phi_1f(Blade.Radius(i)))^2;
-K1f(i) = dr(i)*Stiffness_Flap(i)*(phi2_1f(Blade.Radius(i))^2);
-M1e(i) = dr(i)*Mass(i)*(phi_1e(Blade.Radius(i)))^2;
-K1e(i) = dr(i)*Stiffness_Edge(i)*(phi2_1e(Blade.Radius(i))^2);
+M = diag([M1f, M1e]);
+K = diag([K1f, K1e]);
+C = diag([2*damp_ratio*sqrt(M1f*K1f), 2*damp_ratio*sqrt(M1e*K1e)]);
+
+fprintf("Flap freq: %.4f Hz\n", sqrt(K1f/M1f)/(2*pi));
+fprintf("Edge freq: %.4f Hz\n", sqrt(K1e/M1e)/(2*pi));
+
+
+ %%
+% 2. Coupling
+
+
+function dxdt = aeroelastic_ode(t, z, M, C, K, Blade, BEM, Vinf, Omega, pitch, phi_1f, phi_1e, twist)
+% ODE function for coupled aeroelastic system
+% Converts second-order M*q_ddot + C*q_dot + K*q = F(t) to first-order system
+
+
+% Split state vector
+x     = z(1:2);   % Modal displacements [q_f; q_e]
+x_dot = z(3:4);   % Modal velocities [qf_dot; qe_dot]
+r_struct = Blade.Radius;
+
+vout=x_dot(1).*phi_1f(r_struct);
+vin=x_dot(2).*phi_1e(r_struct);
+    
+% === STEP 1: Call BEM with steady inflow to get initial induced velocities ===
+[Rx, FN, FT, P, Vind_axial, Vind_tangential] = BEM(Vinf, Omega, pitch,vin,vout);
+r = Blade.Radius;
+
+
+% Rotate from flap/edge to rotor in-plane/out-of-plane
+ff =  cos(twist) .* FN + sin(twist).* FT;
+fe =  -sin(twist).* FN + cos(twist).* FT;
+
+% Rotate from flap/edge to rotor in-plane/out-of-plane
+vout_induced =  cos(twist) .* Vind_axial + sin(twist).* Vind_tangential;
+vin_induced =  -sin(twist).* Vind_axial + cos(twist).* Vind_tangential;
+
+
+% Integrate spanwise 
+r_struct = Blade.Radius;
+dr_struct = diff(r_struct); dr_struct(end+1) = dr_struct(end);
+F1_f=sum(dr_struct .* ff .* (phi_1f(r_struct)).^2);
+F1_e=sum(dr_struct .* fe .* (phi_1e(r_struct)).^2);
+
+
+dr=dr_struct;
+Q = [F1_f;F1_e]; % returns [Ff; Fe]
+
+% === STEP 5: Solve second-order system and convert to first-order ===
+x_ddot = M \ (Q - C * x_dot - K * x);
+
+% === STEP 6: Return dx/dt for ODE solver ===
+dxdt = [x_dot; x_ddot];
 end
 
-M1f = sum(M1f);
-K1f = sum(K1f);
-M1e = sum(M1e);
-K1e = sum(K1e);
-
-K = [K1f 0;
-     0  K1e];
-M = [M1f 0;
-     0  M1e];
-C = [2*damp_ratio*sqrt(M1f*K1f)             0;
-            0                       2*damp_ratio*sqrt(M1e*K1e)];
 
 
-omega_flap = sqrt(K1f/M1f);
-omega_edge = sqrt(K1e/M1e);
+% 3. Solve
 
-disp("The natural flap frequency is: " + num2str(omega_flap) + " rad/s or " + ...
-    num2str(omega_flap/2/pi) + " Hz")
-disp("The natural edge frequency is: " + num2str(omega_edge) + " rad/s or " + ...
-    num2str(omega_edge/2/pi) + " Hz")
 
-%% 2 Coupling Aerodynamic with Structural Modules
+%%%%%%%%%%%%%%%%%%%%%%%%%%% Load operational state data %%%%%%%%%%%%%%%%%%%%%%%%%%
 
-% We need to construct the rest of the code before continuing with question
-% 2 of the booklet. We first need to run the BEM with a chosen wind speed
-% (TSR) and extract the force per segment (axial and tangential). We then
-% must couple it to the structural equation of motion to derive the
-% deformation of the section. 
+load('STATE');  % Loads WindSpeeds, RtSpeeds, PitchAngles
+load('NREL5MW.mat');  % Contains Blade.Twist
 
-% Each deformation will cause a change of the relative velocity due to a
-% flapwise and edgewise displacement. We also need 
+% Desired wind speed (you can also set this manually)
+desired_V = 8;  % for example, 8 m/s
+
+% Find closest matching wind speed
+[~, ind] = min(abs(WindSpeeds - desired_V));
+
+% Extract values using that index
+Vinf   = WindSpeeds(ind);
+Omega  = RtSpeeds(ind) * 2 * pi / 60;  % Convert RPM to rad/s
+pitch  = PitchAngles(ind);
+twist = deg2rad(Blade.Twist);
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+%z = [x1f; x1e; dx1f_dt; dx1e_dt];  % 4×1 vector
+z0 = zeros(4, 1);  % No initial displacement or velocity
+
+
+tspan = [0, 0.1];  % 0.1 seconds max
+odefun = @(t, z) aeroelastic_ode(t, z, M, C, K, Blade, @BEM, Vinf, Omega, pitch, phi_1f, phi_1e, twist);
+%options = odeset('RelTol',1e-3,'AbsTol',1e-4);
+[t, z] = ode45(odefun, tspan, z0);
+
+
+%%
+% 4. Postprocess
+x1f = z(:,1);      % Flapwise modal displacement
+x1e = z(:,2);      % Edgewise modal displacement
+dx1f = z(:,3);     % Flapwise velocity
+dx1e = z(:,4);     % Edgewise velocity
+
+
+figure
+plot(t, x1f); hold on;
+plot(t, x1e); legend('Flapwise', 'Edgewise');
+xlabel('Time [s]'); ylabel('Modal displacement [m]');
