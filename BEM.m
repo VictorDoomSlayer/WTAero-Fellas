@@ -41,7 +41,7 @@ EPS=0.00001;    %iterative precision tolerance
 a=0;a_prime=0;
 
 %import Blade section file
-BS = table2array(readtable('Blade/Blade section/Expanded_Blade_Section_Table__48_points_.csv'));
+BS = table2array(readtable('Blade/Blade section/Blade section.dat'));
 %import Aero data files
 Readfiles = dir(fullfile('Blade/Aero data/','*.dat'));
 for i=1:length(Readfiles)
@@ -57,8 +57,8 @@ Vind_tangential=zeros(NBS,1);
 
 % LOOP: from the root section to the tip section
 for i=1:NBS
-    ADofBS=BS(i,3); % read airfoil number for each section
-    r=BS(i,2);      % read radius
+    ADofBS=BS(i,2); % read airfoil number for each section
+    r=BS(i,3);      % read radius
     Rx(i)=r;        % record radius
     dr=BS(i,4);     % read segment length
     Theta=BS(i,5);  % read twist angle
