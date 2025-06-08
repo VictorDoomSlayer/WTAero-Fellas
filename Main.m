@@ -2,7 +2,7 @@ clc
 clear
 close all
 
-% Victor Vassilev
+
 % Wind Turbine Aeroelasticity
 % Delft University of Technology
 
