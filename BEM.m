@@ -82,7 +82,7 @@ for i=1:NBS
         a_prime=ax_prime;
         
         % inflow angle
-        Phi=atan(((1-a)*v0-vout(i))/((1+a_prime)*r*omega)-vin(i));
+        Phi=atan(((1-a)*v0-vout(i))/(((1+a_prime)*r*omega)-vin(i)));
         Phi=rad2deg(Phi);
         
         %AOA

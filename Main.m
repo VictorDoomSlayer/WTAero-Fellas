@@ -4,6 +4,7 @@ close all
 
 % Wind Turbine Aeroelasticity
 % Delft University of Technology
+addpath("OurBEM\");
 
 %% 1. Structural Steady Analysis
 % Must append NREL5MW.mat size to number of sections in blade section.dat
@@ -64,24 +65,40 @@ Omega  = RtSpeeds(ind) * 2 * pi / 60;  % Convert RPM to rad/s
 pitch  = PitchAngles(ind);
 twist = deg2rad(Blade.Twist);
 
-t = 0:0.5:100;
+dt = 0.005;
+t = 0:dt:20;
 x = [0;0];
 x_dot = [0;0];
 x_ddot = [0;0];
 
 for i = 1:length(t)
-
+    
+    % Call inplane and out-of-plane velocities
     vout=x_dot(1).*phi_1f(r_struct);
     vin=x_dot(2).*phi_1e(r_struct);
-    [Rx, FN, FT, P, Vind_axial, Vind_tangential] = BEM(Vinf, Omega, pitch,vin,vout);
+
+    % Solve BEM
+    [Rx, FN, FT, Vind_axial, Vind_tangential] = BEMcode(Vinf,Omega,pitch,vin,vout);
+
+    % Rotate from edge/flap-wise to in/out plane
     ff =  cos(twist) .* FN + sin(twist).* FT;
     fe =  -sin(twist).* FN + cos(twist).* FT;
-    dr_struct = diff(r_struct); 
-    dr_struct(end+1) = dr_struct(end);
-    F1_f=sum(dr_struct .* ff .* (phi_1f(r_struct)).^2);
-    F1_e=sum(dr_struct .* fe .* (phi_1e(r_struct)).^2);
 
+    % Compute general force and construct F vector
+    F1_f=sum(dr_struct .* ff .* phi_1f(r_struct));
+    F1_e=sum(dr_struct .* fe .* phi_1e(r_struct));
+    F = [F1_f;
+         F1_e];
+    
+    % Compute acceleration using system of equations
+    x_ddot = inv(M)*F - inv(M)*C*x_dot - inv(M)*K*x;
+    x_dot = x_dot + dt*x_ddot;
+    x = x + dt*x_dot;
+    xSave(i,:) = x;
+    xdotSave(i,:) = x_dot;
 end
+
+disp(xSave)
 % function dxdt = aeroelastic_ode(t, z, M, C, K, Blade, BEM, Vinf, Omega, pitch, phi_1f, phi_1e, twist)
 % % ODE function for coupled aeroelastic system
 % % Converts second-order M*q_ddot + C*q_dot + K*q = F(t) to first-order system
