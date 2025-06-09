@@ -7,7 +7,7 @@ close all
 
 addpath("OurBEM/");
 
-% 1. Structural Steady Analysis
+%% Structural Steady Analysis
 % Must append NREL5MW.mat size to number of sections in blade section.dat
 givenBlade = readtable("Blade/Blade section/Blade section.dat");
 R = 63;
@@ -49,18 +49,25 @@ K = diag([K1f, K1e]);
 C = diag([2*damp_ratio*sqrt(M1f*K1f), 2*damp_ratio*sqrt(M1e*K1e)]);
 
 % Compute eigenfrequencies and display
-fprintf("Flap freq: %.4f Hz\n", sqrt(K1f/M1f)/(2*pi));
-fprintf("Edge freq: %.4f Hz\n", sqrt(K1e/M1e)/(2*pi));
+omega_flap = sqrt(K1f/M1f)/(2*pi); %[hz]
+omega_edge = sqrt(K1e/M1e)/(2*pi); %[hz]
+fprintf("Flap freq: %.4f Hz\n", omega_flap);
+fprintf("Edge freq: %.4f Hz\n", omega_edge);
 
 
-%% 2. Dynamic Inflow
-% Initialize inflow conditions
-
- function dxdt = aeroelastic_ode(t, z, M, C, K, Blade, BEMcode, Vinf, Omega, pitch, phi_1f, phi_1e, twist,BS,AD,dr)
+%% Dynamic Inflow
+% Setup aeroelastic equation of motion
+ function dxdt = aeroelastic_ode(t, z, M, C, K, Blade, BEMcode, Vinf, Omega, pitch, phi_1f, phi_1e, twist,BS,AD,dr,Periodic)
     x     = z(1:2);   % Modal displacements [q_f; q_e]
     x_dot = z(3:4);   % Modal velocities [qf_dot; qe_dot]
      
     r_struct = Blade.Radius;
+
+    if Periodic == 1
+        Vinf = 15 + 0.5*cos(1.267*t) + 0.085*cos(2.534*t) + 0.015*cos(3.801*t);
+    else
+
+    end
 
     % Call inplane and out-of-plane velocities
     vout=x_dot(1).*phi_1f(r_struct);
@@ -86,9 +93,7 @@ fprintf("Edge freq: %.4f Hz\n", sqrt(K1e/M1e)/(2*pi));
     % Compute acceleration using system of equations
     x_ddot = M\(F - C*x_dot - K*x);
     dxdt = [x_dot; x_ddot];
-end
-
-% 3. Solve
+ end
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%% Load operational state data %%%%%%%%%%%%%%%%%%%%%%%%%%
 load('STATE');  % Loads WindSpeeds, RtSpeeds, PitchAngles
@@ -99,9 +104,10 @@ for i=1:length(Readfiles)
     AD{i}=importdata(strcat('Blade/Aero data/',Readfiles(i).name));
 end
 
-%%
+%% Displacement time-series for V = 15 m/s
+Periodic = 0; % 0= Constant inflow, 1= Periodic Wind
 % Desired wind speed (you can also set this manually)
-desired_V = 10;  % for example, 8 m/s
+desired_V = 15;  % for example, 8 m/s
 
 % Find closest matching wind speed
 [~, ind] = min(abs(WindSpeeds - desired_V));
@@ -115,10 +121,9 @@ twist = deg2rad(Blade.Twist);
 z0 = zeros(4, 1);  % No initial displacement or velocity
 
 tspan = [0, 20];  % 0.1 seconds max
-odefun = @(t, z) aeroelastic_ode(t, z, M, C, K, Blade, @BEMcode, Vinf, Omega, pitch, phi_1f, phi_1e, twist,BS,AD,dr);
+odefun = @(t, z) aeroelastic_ode(t, z, M, C, K, Blade, @BEMcode, Vinf, Omega, pitch, phi_1f, phi_1e, twist,BS,AD,dr,Periodic);
 [t, z] = ode45(odefun, tspan, z0);
 
-%
 % 4. Postprocess
 x1f = z(:,1);      % Flapwise modal displacement
 x1e = z(:,2);      % Edgewise modal displacement
@@ -126,39 +131,33 @@ dx1f = z(:,3);     % Flapwise velocity
 dx1e = z(:,4);     % Edgewise velocity
 
 
-figure
-plot(t, x1f); hold on;
-plot(t, x1e); legend('Flapwise', 'Edgewise');
+figure;
+plot(t, x1f,'LineWidth',1.2); hold on;
+plot(t, x1e,'LineWidth',1.2); legend('Flapwise', 'Edgewise');
 xlabel('Time [s]'); ylabel('Modal displacement [m]');
+grid on;
+title("Blade displacement response for steady wind V_{\inf} = " + num2str(Vinf))
 
-%%
+% Sanity check for BEM
 vin=zeros(17,1);
 vout=zeros(17,1);
 [Rx, FN, FT, Vind_axial, Vind_tangential] = BEMcode(Vinf,Omega,pitch,vin,vout,BS,AD);
 
-figure(1)
-    plot(Rx,FN,'r-o');
-    hold on;
-    plot(Rx,FT,'b-o');
-    hold on
-    grid on
-    xlabel('Radius(m)');
-    ylabel('Loads(N/m)');
-    legend('Fn','Ft');
+figure;
+plot(Rx,FN,'r-o');
+hold on;
+plot(Rx,FT,'b-o');
+hold on
+grid on
+xlabel('Radius(m)');
+ylabel('Loads(N/m)');
+legend('Fn','Ft');
 
-    %%
+%% Out-of-plane tip deflection from 4 m/s to 24 m/s
 
-    %%%%%%%%%%%%%%%%%%%%%%%%%%% Load operational state data %%%%%%%%%%%%%%%%%%%%%%%%%%
-load('STATE');  % Loads WindSpeeds, RtSpeeds, PitchAngles
-BS = table2array(readtable('Blade/Blade section/Blade section.dat'));
-%import Aero data files
-Readfiles = dir(fullfile('Blade/Aero data/','*.dat'));
-for i=1:length(Readfiles)
-    AD{i}=importdata(strcat('Blade/Aero data/',Readfiles(i).name));
-end
 
 vels=4:1:24;
-
+Periodic = 0;
 tip_def=zeros(length(vels),1);
 edge_def=zeros(length(vels),1);
 
@@ -179,10 +178,10 @@ twist = deg2rad(Blade.Twist);
 z0 = zeros(4, 1);  % No initial displacement or velocity
 
 tspan = [0, 20];  % 0.1 seconds max
-odefun = @(t, z) aeroelastic_ode(t, z, M, C, K, Blade, @BEMcode, Vinf, Omega, pitch, phi_1f, phi_1e, twist,BS,AD,dr);
+odefun = @(t, z) aeroelastic_ode(t, z, M, C, K, Blade, @BEMcode, Vinf, Omega, pitch, phi_1f, phi_1e, twist,BS,AD,dr,Periodic);
 [t, z] = ode45(odefun, tspan, z0);
 
-%
+
 % 4. Postprocess
 x1f = z(:,1);      % Flapwise modal displacement
 x1e = z(:,2);      % Edgewise modal displacement
@@ -196,8 +195,51 @@ disp(j)
 
 end
 
-%%
 figure
 plot(vels, tip_def,'o-'); legend('Flapwise');
 grid on
 xlabel('Wind Speed [m/s]'); ylabel('Flapwise Tip Deflection [m]');
+
+%% Periodic wind inflow
+
+Periodic = 1; % 0= Constant inflow, 1= Periodic Wind
+
+% Desired wind speed (you can also set this manually)
+desired_V = 15;
+
+% Find closest matching wind speed
+[~, ind] = min(abs(WindSpeeds - desired_V));
+
+% Extract values using that index
+Vinf   = WindSpeeds(ind);
+Omega  = RtSpeeds(ind) * 2 * pi / 60;  % Convert RPM to rad/s
+pitch  = deg2rad(PitchAngles(ind)); % in degrees
+twist = deg2rad(Blade.Twist);
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+z0 = zeros(4, 1);  % No initial displacement or velocity
+
+tspan = [0, 50];  % 0.1 seconds max
+odefun = @(t, z) aeroelastic_ode(t, z, M, C, K, Blade, @BEMcode, Vinf, Omega, pitch, phi_1f, phi_1e, twist,BS,AD,dr,Periodic);
+[t, z] = ode45(odefun, tspan, z0);
+
+% Postprocess
+x1f = z(:,1);      % Flapwise modal displacement
+x1e = z(:,2);      % Edgewise modal displacement
+dx1f = z(:,3);     % Flapwise velocity
+dx1e = z(:,4);     % Edgewise velocity
+
+figure;
+plot(t, x1f,'LineWidth',1.2); hold on;
+plot(t, x1e,'LineWidth',1.2); legend('Flapwise', 'Edgewise');
+xlabel('Time [s]'); ylabel('Modal displacement [m]');
+grid on;
+title("Blade displacement response for periodic wind condition")
+
+figure;
+plot(t, dx1f,'LineWidth',1.2); hold on;
+plot(t, dx1e,'LineWidth',1.2); legend('Flapwise', 'Edgewise');
+xlabel('Time [s]'); ylabel('Modal velocity [m/s]');
+grid on;
+title("Blade velocity response for periodic wind condition")
+
+plotFrequencySpectra(t, x1f, x1e, dx1f, dx1e, Omega, omega_flap, omega_edge);
