@@ -17,12 +17,6 @@ rho=1.225;     %density of air
 EPS=0.00001;    %iterative precision tolerance
 rRoot = hubrad;
 
-%------------------------------------------------
-% Initialization & Iteration
-%------------------------------------------------
-%initialization: initial value of inductions
-a=0;a_prime=0;
-
 NBS=length(BS);    %Number of blade sections
 % define vectors for blade section locations and loads in two directions
 Rx=zeros(NBS,1);FN=zeros(NBS,1);FT=zeros(NBS,1);
@@ -60,7 +54,6 @@ aprime = 0.01 * ones(1,NBS); % Initialize tangential induction factor along blad
     i = 1;
     cond = false;
         while cond == 0
-
             if i >= 2
             a(i,j) = 0.5*a(i,j) + 0.5*a(i-1,j);
             aprime(i,j) = 0.5*aprime(i,j) + 0.5*aprime(i-1,j);
@@ -93,21 +86,19 @@ aprime = 0.01 * ones(1,NBS); % Initialize tangential induction factor along blad
             
             a(i+1,j) = 0.5*(1-sqrt(1-Ct));
     
-    %% Glauert Correction
+            %% Glauert Correction
             Ct1 = 1.816;
             if a(i+1,j) > 0.5 % Glauert Correction for induction factors above 0.5
                 Ct = 1.816 - 4*(sqrt(1.816)-1)*(1-a(i+1,j));
             else
 
             end
-    
             Ct2 = 2*sqrt(Ct1) - Ct1;
             if Ct >= Ct2
                a(i+1,j) = 1 + (Ct - Ct1)/(4*sqrt(Ct1)-4);           
             else
     
             end
-    
             aprime(i+1,j) = ((Uapp^2)*chord*Cy*B*R)/(8*pi*(r^2)*(U0^2)*(1-a(i+1,j))*lambda);
             aDiff = abs(a(i+1,j) - a(i,j));
             aPrimeDiff = abs(aprime(i+1,j) - aprime(i,j));
@@ -122,15 +113,12 @@ aprime = 0.01 * ones(1,NBS); % Initialize tangential induction factor along blad
     
         phiEnd = atand(UR/UTang); % Inflow angle
         alphaEnd = phiEnd - Theta - Pitch; % AoA
-        phi_temp(j) = phiEnd;
-        alpha_temp(j) = alphaEnd;
     
         Cl = interp1(Alpha,Cl_t,alpha); % Interpolation to find polars
         Cd = interp1(Alpha,Cd_t,alpha); % Interpolation to find polars
         Cx = Cl*cosd(phiEnd) + Cd*sind(phiEnd);
         Cy = Cl*sind(phiEnd) - Cd*cosd(phiEnd);
         CT(j) = 4*a(i,j)*(1-a(i,j));
-        % Cq(j) = 4*aprime(i,j)*(1-a(i,j))*lambda*mu(j);
         Cp(j) = 4*a(i,j)*(1-a(i,j))^2;
     
         FAxial(j) = Cx*0.5*rho*(Uapp^2)*chord; % Axial force per newton/m 
@@ -139,10 +127,8 @@ aprime = 0.01 * ones(1,NBS); % Initialize tangential induction factor along blad
         aEnd = a(i,j); 
         aprimeEnd = aprime(i,j);
 
-        % FN(j)=0.5*rho*((r*omega*(1+aprimeEnd))^2+(Vinf*(1-aEnd))^2)*chord*Cx*dr;
-        % FT(j)=0.5*rho*((r*omega*(1+aprimeEnd))^2+(Vinf*(1-aEnd))^2)*chord*Cy*dr;
-        FN(j) = FAxial(j);
-        FT(j) = FTang(j);
+        FN(j) = FAxial(j)*dr;% in N/m 
+        FT(j) = FTang(j)*dr;%in N/m 
         % bending moment
         Mx(j)=FT(j)*r;
     
@@ -150,12 +136,5 @@ aprime = 0.01 * ones(1,NBS); % Initialize tangential induction factor along blad
         Vind_axial(j)      = aEnd.* Vinf;
         Vind_tangential(j) = aprimeEnd .* omega .* Rx(j);
     end
-    % TAnnul = FAxial.*dr; %Thrust per annuli of one blade
-    % QAnnul = FTang.*dr.*(mu.*R); %Torque per annuli of one blade
-    % 
-    % QTotal = sum(QAnnul)*B; %Total Torque on rotor (N)
-    % TTotal = sum(TAnnul)*B; %Total Thrust on rotor (N)
-    % 
-    % Total_CT = TTotal/(q*pi*R^2);
-    % Total_CP = QTotal*omega/(q*U0*pi*R^2);
+
 end
