@@ -1,7 +1,7 @@
 clc
 clear
 close all
-
+% sebas
 % Wind Turbine Aeroelasticity
 % Delft University of Technologyc
 
