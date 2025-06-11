@@ -131,18 +131,13 @@ dx1f = z(:,3);     % Flapwise velocity
 dx1e = z(:,4);     % Edgewise velocity
 
 
-figure;
-plot(t, x1f,'LineWidth',1.2); hold on;
-plot(t, x1e,'LineWidth',1.2); legend('Flapwise', 'Edgewise');
-xlabel('Time [s]'); ylabel('Modal displacement [m]');
-grid on;
-title("Blade displacement response for steady wind V_{\inf} = " + num2str(Vinf))
-
 % Sanity check for BEM
 vin=zeros(17,1);
 vout=zeros(17,1);
 [Rx, FN, FT, Vind_axial, Vind_tangential] = BEMcode(Vinf,Omega,pitch,vin,vout,BS,AD);
 
+
+% Plot deflections (steady)
 figure(1)
 subplot(2,1,1)
 plot(t, x1f); grid on;
