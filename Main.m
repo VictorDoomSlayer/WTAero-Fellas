@@ -143,15 +143,17 @@ vin=zeros(17,1);
 vout=zeros(17,1);
 [Rx, FN, FT, Vind_axial, Vind_tangential] = BEMcode(Vinf,Omega,pitch,vin,vout,BS,AD);
 
-figure;
-plot(Rx,FN,'r-o');
-hold on;
-plot(Rx,FT,'b-o');
-hold on
-grid on
-xlabel('Radius(m)');
-ylabel('Loads(N/m)');
-legend('Fn','Ft');
+figure(1)
+subplot(2,1,1)
+plot(t, x1f); grid on;
+ylim([0 3.5])
+title('Tip deflection')
+ylabel('Modal displacement [m]');
+
+subplot(2,1,2)
+plot(t, x1e); 
+title('Edge deflection')
+xlabel('Time [s]'); ylabel('Modal displacement [m]');
 
 %% Out-of-plane tip deflection from 4 m/s to 24 m/s
 
