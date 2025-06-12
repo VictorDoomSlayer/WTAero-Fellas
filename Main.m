@@ -152,7 +152,6 @@ xlabel('Time [s]'); ylabel('Modal displacement [m]');
 
 %% Out-of-plane tip deflection from 4 m/s to 24 m/s
 
-
 vels=4:1:24;
 Periodic = 0;
 tip_def=zeros(length(vels),1);
@@ -225,18 +224,71 @@ x1e = z(:,2);      % Edgewise modal displacement
 dx1f = z(:,3);     % Flapwise velocity
 dx1e = z(:,4);     % Edgewise velocity
 
+%%%%%%%%%%%%%%% plot displacement %%%%%%%%%%%%
 figure;
-plot(t, x1f,'LineWidth',1.2); hold on;
-plot(t, x1e,'LineWidth',1.2); legend('Flapwise', 'Edgewise');
-xlabel('Time [s]'); ylabel('Modal displacement [m]');
+subplot(2,1,1)
+plot(t, x1f,'LineWidth',1.2);
+ ylabel('Displacement [m]');
 grid on;
-title("Blade displacement response for periodic wind condition")
+title("Flapwise response")
 
+subplot(2,1,2)
+plot(t, x1e,'LineWidth',1.2);
+xlabel('Time [s]');  ylabel('Displacement [m]');
+grid on;
+title("Edgewise response")
+
+%%
 figure;
+subplot(2,1,1)
 plot(t, dx1f,'LineWidth',1.2); hold on;
-plot(t, dx1e,'LineWidth',1.2); legend('Flapwise', 'Edgewise');
+ylabel('Modal velocity [m/s]');
+grid on
+title("Flapwise velocity response")
+subplot(2,1,2)
+plot(t, dx1e,'LineWidth',1.2);
 xlabel('Time [s]'); ylabel('Modal velocity [m/s]');
 grid on;
-title("Blade velocity response for periodic wind condition")
-
+title("Edgewise velocity response")
+%%
 plotFrequencySpectra(t, x1f, x1e, dx1f, dx1e, Omega, omega_flap, omega_edge);
+%% New plotting routine for Freq response
+
+for i=1:2
+signal=[x1f , x1e];
+% Define uniform time vector
+t_uniform = linspace(t(1), t(end), length(t));
+
+% Interpolate signal
+y_uniform = interp1(t, signal(:,i), t_uniform, 'pchip');
+%y_uniform = y_uniform - mean(y_uniform);
+
+dt=mean(diff(t_uniform));% approximate mean timestep
+L = length(t_uniform);       % Number of points
+Fs = 1/dt;                   % Sampling frequency
+window = hann(L)';
+Y = fft(y_uniform .* window);% Compute FFT}
+
+
+%Y = fft(y_uniform);
+P2 = abs(Y/L);                % Magnitude spectrum (normalised)
+
+P1 = P2(1:L/2+1);
+P1(2:end-1) = 2*P1(2:end-1);
+f = Fs/L*(0:(L/2));
+
+%figure(2)
+subplot(2,1,i)
+semilogy(f,P1) 
+grid on
+hold on
+title("Bending root moment Frequency Response")
+xlabel("f (Hz)")
+ylabel("|P1(f)|")
+xlim([0 5])
+
+%xline(0.7022, '--b', 'f_e (1.079 Hz)', 'LabelVerticalAlignment', 'top', 'LabelHorizontalAlignment', 'right', 'FontSize', 7);
+xline(1.079, '--k', 'f_e (1.079 Hz)', 'LabelVerticalAlignment', 'top', 'LabelHorizontalAlignment', 'right', 'FontSize', 7);
+end
+
+legend('Flapwise', 'Edgewise')
