@@ -1,4 +1,4 @@
-function [Rx, FN, FT, Vind_axial, Vind_tangential] = BEMcode(Vinf,Omega,Pitch,Vin,Vout,BS,AD)
+function [Rx, FN, FT, Vind_axial, Vind_tangential] = BEMcode(Vinf,Omega,Pitch,Vin,Vout,BS,AD,coupling)
 
 %Rotor/ Wake Aerodynamics
 %Group 28 
@@ -71,9 +71,19 @@ aprime = 0.01 * ones(1,NBS); % Initialize tangential induction factor along blad
             Cd_t=AD{ADofBS}(:,3); % coefficients table: drag coe
             Sigma=chord*B/(2*pi*r); % solidity
 
-            UR = U0*(1-a(i,j))-Vout(j); % Obtain axial velocity at rotor
+            if coupling == 1
+                UR = U0*(1-a(i,j))-Vout(j); % Obtain axial velocity at rotor
             UTang = omega*r*(1+aprime(i,j))-Vin(j); % Obtain rotor-induced velocity
             Uapp = sqrt(UR^2 + UTang^2);
+            else
+                UR = U0*(1-a(i,j))-(Vout(j).*0); % Obtain axial velocity at rotor
+                UTang = omega*r*(1+aprime(i,j))-(Vin(j).*0); % Obtain rotor-induced velocity
+                Uapp = sqrt(UR^2 + UTang^2);
+            end
+
+            % UR = U0*(1-a(i,j))-Vout(j); % Obtain axial velocity at rotor
+            % UTang = omega*r*(1+aprime(i,j))-Vin(j); % Obtain rotor-induced velocity
+            % Uapp = sqrt(UR^2 + UTang^2);
     
             phi = atand(UR/UTang); % Inflow angle
             alpha = phi - Theta - Pitch; % AoA
