@@ -67,7 +67,7 @@ fprintf("Edge freq: %.4f Hz\n", omega_edge);
 
 %% Dynamic Inflow
 % Setup aeroelastic equation of motion
-function [dxdt,F] = aeroelastic_ode(t, z, M, C, K, Blade, BEMcode, Vinf, Omega, pitch, phi_1f, phi_1e, twist,BS,AD,dr,Periodic,coupling)
+function [dxdt,Moments] = aeroelastic_ode(t, z, M, C, K, Blade, BEMcode, Vinf, Omega, pitch, phi_1f, phi_1e, twist,BS,AD,dr,Periodic,coupling)
     x     = z(1:2);   % Modal displacements [q_f; q_e]
     x_dot = z(3:4);   % Modal velocities [qf_dot; qe_dot]
      
@@ -105,10 +105,15 @@ function [dxdt,F] = aeroelastic_ode(t, z, M, C, K, Blade, BEMcode, Vinf, Omega, 
     ff =  cos(twist+pitch) .* FN + sin(twist+pitch).* FT;
     fe =  -sin(twist+pitch).* FN + cos(twist+pitch).* FT;
 
+    M_f = trapz(Blade.Radius, ff./dr .* phi_1f(r_struct).*r_struct);
+    M_e = trapz(Blade.Radius, -fe./dr .* phi_1e(r_struct).*r_struct);
+
     % Compute general force and construct F vector
     F1_f=trapz(Blade.Radius, ff./dr .* phi_1f(r_struct));
     F1_e=trapz(Blade.Radius, fe./dr .* phi_1e(r_struct));
     F = [F1_f, F1_e];
+
+     Moments = [M_f, M_e];
     
     % Compute acceleration using system of equations
     x_ddot = M\(F' - C*x_dot - K*x);
@@ -118,7 +123,7 @@ function [dxdt,F] = aeroelastic_ode(t, z, M, C, K, Blade, BEMcode, Vinf, Omega, 
 %
 %% Displacement time-series for V = 15 m/s
 
-Periodic = 1; % 0= Constant inflow, 1= Periodic Wind
+Periodic = 0; % 0= Constant inflow, 1= Periodic Wind
 Coupling = 1; % aeroelastic coupling activation
 
 % Desired wind speed (you can also set this manually)
@@ -138,8 +143,8 @@ z0 = zeros(4, 1);  % No initial displacement or velocity
 tspan = [0, 20];  % 0.1 seconds max
 odefun = @(t, z) aeroelastic_ode(t, z, M, C, K, Blade, @BEMcode, Vinf, Omega, pitch, phi_1f, phi_1e, twist,BS,AD,dr,Periodic,Coupling);
 [t, z] = ode45(odefun, tspan, z0);
-%[~,F] = cellfun(@(t,z) aeroelastic_ode(t, z.',M, C, K, Blade, @BEMcode, Vinf, Omega, pitch, phi_1f, phi_1e, twist,BS,AD,dr,Periodic),num2cell(t), num2cell(z,2),'uni',0);
-%F = cell2mat(F);
+[~,Moments] = cellfun(@(t,z) aeroelastic_ode(t, z.',M, C, K, Blade, @BEMcode, Vinf, Omega, pitch, phi_1f, phi_1e, twist,BS,AD,dr,Periodic,Coupling),num2cell(t), num2cell(z,2),'uni',0);
+Moments = cell2mat(Moments);
 
 % 4. Postprocess
 x1f = z(:,1);      % Flapwise modal displacement
@@ -148,10 +153,10 @@ dx1f = z(:,3);     % Flapwise velocity
 dx1e = z(:,4);     % Edgewise velocity
 
 % 5. Compute root bending moments
-Moments = zeros(2, length(t));
-for i = 1:length(t)
-    Moments(:,i) = compute_moments(z(i,1:2)', z(i,3:4)', Blade, phi_1f, phi_1e, pitch, twist, Vinf, Omega, BS, AD, dr,Coupling);
-end
+% Moments = zeros(2, length(t));
+% for i = 1:length(t)
+%     Moments(:,i) = compute_moments(z(i,1:2)', z(i,3:4)', Blade, phi_1f, phi_1e, pitch, twist, Vinf, Omega, BS, AD, dr,Coupling);
+% end
 
 % % Sanity check for BEM
 % vin=zeros(17,1);
@@ -221,9 +226,9 @@ grid on
 xlabel('Wind Speed [m/s]'); ylabel('Flapwise Tip Deflection [m]');
 xlim([3 25.5])
 %% Periodic wind inflow
-
+clc
 Periodic = 1; % 0= Constant inflow, 1= Periodic Wind
-Coupling = 1; % aeroelastic coupling activation
+Coupling = 0; % aeroelastic coupling activation
 
 
 % Desired wind speed (you can also set this manually)
@@ -239,11 +244,12 @@ pitch  = deg2rad(PitchAngles(ind)); % in degrees
 twist = deg2rad(Blade.Twist);
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 z0 = zeros(4, 1);  % No initial displacement or velocity
-clear z 
+
 tspan = [0, 50];  % 0.1 seconds max
 odefun = @(t, z) aeroelastic_ode(t, z, M, C, K, Blade, @BEMcode, Vinf, Omega, pitch, phi_1f, phi_1e, twist,BS,AD,dr,Periodic,Coupling);
 [t, z] = ode45(odefun, tspan, z0);
-
+[~,Moments] = cellfun(@(t,z) aeroelastic_ode(t, z.',M, C, K, Blade, @BEMcode, Vinf, Omega, pitch, phi_1f, phi_1e, twist,BS,AD,dr,Periodic,Coupling),num2cell(t), num2cell(z,2),'uni',0);
+Moments = cell2mat(Moments);
 
 % Postprocess
 x1f = z(:,1);      % Flapwise modal displacement
@@ -251,11 +257,7 @@ x1e = z(:,2);      % Edgewise modal displacement
 dx1f = z(:,3);     % Flapwise velocity
 dx1e = z(:,4);     % Edgewise velocity
 
-% 5. Compute root bending moments
-Moments = zeros(2, length(t));
-for i = 1:length(t)
-    Moments(:,i) = compute_moments(z(i,1:2)', z(i,3:4)', Blade, phi_1f, phi_1e, pitch, twist, Vinf, Omega, BS, AD, dr);
-end
+
 
 %%
 %%%%%%%%%%%%%%% plot displacement %%%%%%%%%%%%
@@ -275,13 +277,13 @@ title("Edgewise response")
 %%%%%%%%%%%%%%% plot root bending moments %%%%%%%%%%%%
 figure;
 subplot(2,1,1)
-plot(t, M(1,:),'LineWidth',1.2);
+plot(t, Moments(:,1),'LineWidth',1.2);
  ylabel('Moment [Nm]');
 grid on;
 title("Flapwise root bending moment")
 
 subplot(2,1,2)
-plot(t, M(2,:),'LineWidth',1.2);
+plot(t, Moments(:,2),'LineWidth',1.2);
 xlabel('Time [s]');   ylabel('Moment [Nm]');
 grid on;
 title("Edgewise root bending moment")
@@ -373,7 +375,8 @@ z0 = zeros(4, 1);  % No initial displacement or velocity
 tspan = [0, 50];  % 0.1 seconds max
 odefun = @(t, z) aeroelastic_ode(t, z, M, C, K, Blade, @BEMcode, Vinf, Omega, pitch, phi_1f, phi_1e, twist,BS,AD,dr,Periodic,Coupling);
 [t, z] = ode45(odefun, tspan, z0);
-
+[~,Moments] = cellfun(@(t,z) aeroelastic_ode(t, z.',M, C, K, Blade, @BEMcode, Vinf, Omega, pitch, phi_1f, phi_1e, twist,BS,AD,dr,Periodic,Coupling),num2cell(t), num2cell(z,2),'uni',0);
+Moments = cell2mat(Moments);
 
 % Postprocess
 x1f = z(:,1);      % Flapwise modal displacement
@@ -381,11 +384,6 @@ x1e = z(:,2);      % Edgewise modal displacement
 dx1f = z(:,3);     % Flapwise velocity
 dx1e = z(:,4);     % Edgewise velocity
 
-% 5. Compute root bending moments
-Moments = zeros(2, length(t));
-for i = 1:length(t)
-    Moments(:,i) = compute_moments(z(i,1:2)', z(i,3:4)', Blade, phi_1f, phi_1e, pitch, twist, Vinf, Omega, BS, AD, dr);
-end
 
 
 %%%%%%%%%%%%%%% plot displacement %%%%%%%%%%%%
@@ -395,33 +393,33 @@ plot(t, x1f,'LineWidth',1.2);
 grid on;
 title("Flapwise response")
 hold on
-
+legend('Without vibration blade velocities','With vibration blade velocities')
 %%%%%%%%%%%%%%% plot moments %%%%%%%%%%%%
 figure(2);
 subplot(2,1,1)
-plot(t, Moments(1,:),'LineWidth',1.2);
- ylabel('Moment [Nm]');
+plot(t, Moments(:,1),'LineWidth',1.2);
+ylabel('Moment [Nm]');
 grid on;
 hold on
 title("Flapwise root bending moment")
 
 subplot(2,1,2)
-plot(t, Moments(2,:),'LineWidth',1.2);
+plot(t, Moments(:,2),'LineWidth',1.2);
 xlabel('Time [s]');   ylabel('Moment [Nm]');
 grid on;
 hold on
 title("Edgewise root bending moment")
-
+legend('Without vibration blade velocities','With vibration blade velocities')
 
 %%%%%%%%%%%%%%% plot frequency response%%%%%%%%%%%%
 figure(3);
 titles={'Flapwise root bending moment','Edgewise root bending moment'};
 for k = 1:2 
-    signal=[Moments(1,:) ; Moments(2,:)];
+    signal=[Moments(:,1) , Moments(:,2)];
     % Define uniform time vector
     t_uniform = linspace(t(1), t(end), length(t));
     % Interpolate signal
-    y_uniform = interp1(t, signal(k,:), t_uniform, 'pchip');
+    y_uniform = interp1(t, signal(:,k), t_uniform, 'pchip');
     %y_uniform = y_uniform - mean(y_uniform);
     
     dt=mean(diff(t_uniform));% approximate mean timestep
@@ -452,4 +450,4 @@ xline(1.079, '--b', 'f_e (1.079 Hz)', 'LabelVerticalAlignment', 'top', 'LabelHor
 xline(1.267/2/pi, 'k--', '1P','LabelOrientation', 'horizontal', 'LabelVerticalAlignment', 'bottom', 'LabelHorizontalAlignment', 'center','FontSize', 10);
 xline(2.534/2/pi, 'k--', '2P','LabelOrientation', 'horizontal', 'LabelVerticalAlignment', 'bottom','LabelHorizontalAlignment', 'center', 'FontSize', 10);
 xline(3.801/2/pi, 'k--', '3P','LabelOrientation', 'horizontal', 'LabelVerticalAlignment', 'bottom', 'LabelHorizontalAlignment', 'center', 'FontSize', 10);
-legend('Without Coupling','Coupled')
+legend('Without vibration blade velocities','With vibration blade velocities')
