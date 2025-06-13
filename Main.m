@@ -67,7 +67,7 @@ fprintf("Edge freq: %.4f Hz\n", omega_edge);
 
 %% Dynamic Inflow
 % Setup aeroelastic equation of motion
-function [dxdt,F] = aeroelastic_ode(t, z, M, C, K, Blade, BEMcode, Vinf, Omega, pitch, phi_1f, phi_1e, twist,BS,AD,dr,Periodic,Coupling)
+function [dxdt,F] = aeroelastic_ode(t, z, M, C, K, Blade, BEMcode, Vinf, Omega, pitch, phi_1f, phi_1e, twist,BS,AD,dr,Periodic,coupling)
     x     = z(1:2);   % Modal displacements [q_f; q_e]
     x_dot = z(3:4);   % Modal velocities [qf_dot; qe_dot]
      
@@ -82,19 +82,24 @@ function [dxdt,F] = aeroelastic_ode(t, z, M, C, K, Blade, BEMcode, Vinf, Omega, 
     % Call inplane and out-of-plane velocities
     vout=x_dot(1).*phi_1f(r_struct);
     vin=x_dot(2).*phi_1e(r_struct);
-
-    if Coupling ==1
-        % Shift to Rotor Axis
-        v_axial =  cos(twist + pitch) .* vout - sin(twist + pitch) .* vin;
-        v_tang  =  sin(twist + pitch) .* vout + cos(twist + pitch) .* vin;
-        else
-         v_axial =vout*0;
-         v_tang=vout*0;
-    end
+    % persistent Vind_axial Vind_tangential
+    % if isempty(Vind_axial)
+       %   Vind_axial = vout.*0;  % initialise on first call
+       % Vind_tangential = vout.*0;
+    % end
+    % 
+    % if Coupling ==1
+    %     Shift to Rotor Axis
+         v_axial =  cos(twist + pitch) .* vout - sin(twist + pitch) .* vin;
+         v_tang  =  sin(twist + pitch) .* vout + cos(twist + pitch) .* vin;
+    %     else
+    %      v_axial =Vind_axial;
+    %      v_tang=Vind_tangential;
+    % end
 
 
     % Solve BEM
-    [Rx, FN, FT, Vind_axial, Vind_tangential] = BEMcode(Vinf,Omega,rad2deg(pitch),v_tang,v_axial,BS,AD);
+    [Rx, FN, FT, Vind_axial, Vind_tangential] = BEMcode(Vinf,Omega,rad2deg(pitch),v_tang,v_axial,BS,AD,coupling);
 
     % Rotate from edge/flap-wise to in/out plane
     ff =  cos(twist+pitch) .* FN + sin(twist+pitch).* FT;
@@ -113,7 +118,7 @@ function [dxdt,F] = aeroelastic_ode(t, z, M, C, K, Blade, BEMcode, Vinf, Omega, 
 %
 %% Displacement time-series for V = 15 m/s
 
-Periodic = 0; % 0= Constant inflow, 1= Periodic Wind
+Periodic = 1; % 0= Constant inflow, 1= Periodic Wind
 Coupling = 1; % aeroelastic coupling activation
 
 % Desired wind speed (you can also set this manually)
@@ -145,13 +150,13 @@ dx1e = z(:,4);     % Edgewise velocity
 % 5. Compute root bending moments
 Moments = zeros(2, length(t));
 for i = 1:length(t)
-    Moments(:,i) = compute_moments(z(i,1:2)', z(i,3:4)', Blade, phi_1f, phi_1e, pitch, twist, Vinf, Omega, BS, AD, dr);
+    Moments(:,i) = compute_moments(z(i,1:2)', z(i,3:4)', Blade, phi_1f, phi_1e, pitch, twist, Vinf, Omega, BS, AD, dr,Coupling);
 end
 
-% Sanity check for BEM
-vin=zeros(17,1);
-vout=zeros(17,1);
-[Rx, FN, FT, Vind_axial, Vind_tangential] = BEMcode(Vinf,Omega,pitch,vin,vout,BS,AD);
+% % Sanity check for BEM
+% vin=zeros(17,1);
+% vout=zeros(17,1);
+% [Rx, FN, FT, Vind_axial, Vind_tangential] = BEMcode(Vinf,Omega,pitch,vin,vout,BS,AD);
 
 
 % Plot deflections (steady)
